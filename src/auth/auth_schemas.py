@@ -1,27 +1,39 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, conlist
+from typing import Annotated, List
+RecoveryPhraseHashes = Annotated[
+    List[str],
+    Field(
+        min_length=20,
+        max_length=20,
+        description=(
+            "Hashed recovery phrase words generated on the client. "
+            "The original phrase is never sent to the server."
+        )
+    )
+]
 
 # REQUESTS
 class SignupRequest(BaseModel):
-    public_key: str = Field(description="The user's generated Public Key in PEM format.")
-    user_name: str = Field(description="The User's pseudonym. Do not use your real name or anything that can be linked back to you")
-    key_algorithm: str = Field(description="The user's key algorithm")
+    pseudonym: str = Field(description="The user's anonymous identifier", min_length=3)
+    public_key: str = Field(description="The Ed25519 public key in base64 format")
+    recovery_phrase_hashes: RecoveryPhraseHashes
 
 class LoginRequest(BaseModel):
-    user_name: str = Field(description="The User's pseudonym, used for Sign up")
+    pseudonym: str = Field(description="The User's pseudonym")
 
 class VerifyRequest(BaseModel):
-    user_name: str = Field(description="The User's pseudonym, used for Sign up")
-    signature: str = Field(description="The signed challenge")
+    pseudonym: str = Field(description="The User's pseudonym")
+    signature: str = Field(description="The Ed25519 signature of the challenge in base64 format")
 
 
 # RESPONSES
 class SignUpResponse(BaseModel):
     id: int
-    user_name: str
+    pseudonym: str
     challenge: str
 
 class LoginResponse(BaseModel):
-    user_name: str
+    pseudonym: str
     challenge: str
 
 class VerifyResponse(BaseModel):

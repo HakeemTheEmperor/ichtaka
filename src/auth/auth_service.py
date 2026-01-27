@@ -14,93 +14,96 @@ JWT_SECRET = settings.JWT_SECRET_KEY
 JWT_ALG = settings.JWT_ALGORITHM
 JWT_EXP_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
-def get_account_by_public_key(db: Session, public_key: str) -> User_Account:
-    db_account = db.query(User_Account).filter(User_Account.public_key == public_key).first()
-    
-    if not db_account:
-        raise NotFound()
-    
-    return db_account
+def generate_login_id():
+    return f"user_{secrets.token_hex(8)}"
 
-def signup(db:Session, data:SignupRequest):
-    existing_key = db.query(User_Account).filter(User_Account.public_key == data.public_key).first()
-    if existing_key:
-        raise AlreadyExists("Public_key already exists")
+def signup(db: Session, data: SignupRequest):
+    existing_pseudonym = db.query(User_Account).filter(User_Account.pseudonym == data.pseudonym).first()
+    if existing_pseudonym:
+        raise AlreadyExists("This pseudonym is already in use")
     
-    existing_username = db.query(User_Account).filter(User_Account.user_name == data.user_name).first()
-    if existing_username:
-        raise AlreadyExists("This user_name is already in use")
+    login_id = generate_login_id()
+    challenge = secrets.token_urlsafe(32)
     
-    current_challenge = secrets.token_hex(32)
-    
-    new_user = User_Account(public_key=data.public_key, user_name = data.user_name, key_algorithm=data.key_algorithm, current_challenge=current_challenge)
+    new_user = User_Account(
+        login_id=login_id,
+        public_key=data.public_key,
+        pseudonym=data.pseudonym,
+        recovery_phrase_hashes=data.recovery_phrase_hashes,
+        current_challenge=challenge
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     
     return SuccessResponse(
-        message="Signup successful. Verify to login", 
+        message="Signup successful. Verify the challenge to complete registration.", 
         code=status.HTTP_201_CREATED, 
         data=SignUpResponse(
             id=new_user.id, 
-            user_name=new_user.user_name,
-            challenge=new_user.current_challenge
-            )
-        )
-    
-   
-def login(db:Session, data:LoginRequest):
-    user = db.query(User_Account).filter(User_Account.user_name == data.user_name).first()
-    if not user:
-        raise NotFound('This user account does not exist')
-    challenge = secrets.token_hex(32)
-    user.current_challenge=challenge
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    return SuccessResponse(
-        message="Login Successful. Verify to complete the login process",
-        code=status.HTTP_200_OK,
-        data=LoginResponse(
-            user_name=user.user_name,
+            pseudonym=new_user.pseudonym,
             challenge=challenge
         )
     )
-  
-def check_username(db:Session, user_name: str):
-    user = db.query(User_Account).filter(User_Account.user_name == user_name).first()
+
+def login(db: Session, data: LoginRequest):
+    user = db.query(User_Account).filter(User_Account.pseudonym == data.pseudonym).first()
+    if not user:
+        raise NotFound("User not found.")
+    
+    challenge = secrets.token_urlsafe(32)
+    user.current_challenge = challenge
+    db.add(user)
+    db.commit()
+    
+    return SuccessResponse(
+        message="Challenge generated. Please sign it with your private key.",
+        code=status.HTTP_200_OK,
+        data=LoginResponse(
+            pseudonym=user.pseudonym,
+            challenge=challenge
+        )
+    )
+
+def check_username(db: Session, user_name: str):
+    user = db.query(User_Account).filter(User_Account.pseudonym == user_name).first()
     
     if user:
-        raise AlreadyExists('The username is already in use')
-    return SuccessResponse(message="UserName available", code=200, data={"is_available": True})
+        raise AlreadyExists('The pseudonym is already in use')
+    return SuccessResponse(message="Pseudonym available", code=200, data={"is_available": True})
 
-
-def verify_auth(db:Session, data: VerifyRequest):
-    user = db.query(User_Account).filter(User_Account.user_name == data.user_name).first()
+def verify_auth(db: Session, data: VerifyRequest):
+    user = db.query(User_Account).filter(User_Account.pseudonym == data.pseudonym).first()
     if not user:
         raise NotFound('This user account does not exist.')
     
     if not user.current_challenge:
         raise InvalidSignature("No active challenge: try logging in.")
+    
     ok = verify_ed25519_signature(user.public_key, user.current_challenge, signature_b64=data.signature)
     if not ok:
         user.current_challenge = None
         db.add(user)
         db.commit()
         raise InvalidSignature('Authentication Failed')
+    
     payload = {
         "sub": str(user.id),
-        "public_key": user.public_key,
+        "pseudonym": user.pseudonym,
         "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
     }
-    token = jwt.encode(payload, JWT_SECRET,algorithm=JWT_ALG)
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
     
     user.current_challenge = None
     db.add(user)
     db.commit()
     db.refresh(user)
-    return SuccessResponse(message="Authentication successful.", code=status.HTTP_200_OK, data=VerifyResponse(user_id=user.id, token=token))
+    
+    return SuccessResponse(
+        message="Authentication successful.", 
+        code=status.HTTP_200_OK, 
+        data=VerifyResponse(user_id=user.id, token=token)
+    )
     
     
     

@@ -1,9 +1,9 @@
 from typing import Generic, TypeVar, Optional
-from pydantic.generics import GenericModel
+from pydantic import BaseModel
 
-T = TypeVar("DataT")
+T = TypeVar("T")
 
-class APIResponse(GenericModel, Generic[T]):
+class APIResponse(BaseModel, Generic[T]):
     message: str = 'Success'
     code: int = 200
     error: Optional[str] = None
