@@ -102,7 +102,7 @@ def verify_auth(db: Session, data: VerifyRequest):
     return SuccessResponse(
         message="Authentication successful.", 
         code=status.HTTP_200_OK, 
-        data=VerifyResponse(user_id=user.id, token=token)
+        data=VerifyResponse(user_id=user.id, token=token, pseudonym=user.pseudonym)
     )
     
     
