@@ -6,6 +6,8 @@ from .post_actions.router import router as post_actions_router
 from src.core.errors.exception_handlers import (app_exception_handler, unhandled_exception_handler)
 from src.core.errors.base_exception import AppException
 from src.database import Base, engine
+from fastapi.middleware.cors import CORSMiddleware
+from .config import settings
 
 # Import all models here so Base.metadata knows about them
 from src.auth.models.user_account import User_Account
@@ -13,6 +15,14 @@ from src.post.models import Post
 from src.post_actions.models import Comment, Vote
 
 app = FastAPI(title="Ichtaka API", description="Secure, anonymous reporting and social platform")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.add_exception_handler(AppException, app_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -20,4 +20,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     
+    # CORS Settings
+    CORS_ORIGINS: list[str] = ["*"]
+    
 settings = Settings()
