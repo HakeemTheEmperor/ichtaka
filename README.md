@@ -1,12 +1,12 @@
 # ICHTAKA API 🛡️
 
-**Ichtaka** is a secure, anonymous reporting platform designed to empower individuals to report incidents or share information without fear of retribution.
+**Ichtaka** is a secure, anonymous social and sharing platform designed to empower individuals to share information or express opinions without fear of retribution.
 
 ## Features
 
-- **🔐 True Anonymity**: Uses pseudonyms and secure verification to protect reporter identity.
-- **📝 Incident Reporting**: Easy-to-use interface for creating detailed reports.
-- **💬 Community Engagement**: Vote and comment on reports to build consensus and provide additional context.
+- **🔐 True Anonymity**: Uses pseudonyms and secure verification to protect user identity.
+- **📝 Post Creation**: Easy-to-use interface for creating detailed posts.
+- **💬 Community Engagement**: Vote and comment on posts to build consensus and provide additional context.
 - **🚀 Fast & Scaleable**: Built with FastAPI and PostgreSQL for high performance.
 
 ## Tech Stack
@@ -69,21 +69,19 @@ _This command runs the server at `http://0.0.0.0:8000` with hot-reload enabled._
 - `POST /login`: Login to the platform.
 - `POST /verify`: Dual-factor/Verification step after signup/login.
 
-### Reports (`/v1/reports`)
+### Posts (`/v1/posts`)
 
-- `POST /`: Create a new report.
-- `GET  /`: Fetch the report feed (with pagination and filtering).
-- `POST /{id}/vote`: Cast a vote (up/down) on a report.
-- `POST /{id}/comments`: Add a comment to a report.
-- `PATCH /{id}/status`: (Admin) Update the status of a report (e.g., Pending, Resolved).
+- `POST /`: Create a new post.
+- `GET  /`: Fetch the feed (with pagination and filtering).
+- `GET  /{id}`: Get post details.
+- `PUT  /{id}`: Update a post.
+- `DELETE /{id}`: Delete a post.
 
-### Posts (`/v1/post`)
+### Post Actions (`/v1/posts/actions`)
 
-- `POST /posts/`: Create a general post.
-- `GET  /posts/`: Get list of posts.
-- `GET  /posts/{id}`: Get post details.
-- `PUT  /posts/{id}`: Update a post.
-- `DELETE /posts/{id}`: Delete a post.
+- `POST /{id}/comments`: Add a comment to a post.
+- `POST /{id}/vote`: Cast a vote (up/down) on a post.
+- `PATCH /{id}/status`: (Admin) Update the status of a post (e.g., Pending, Resolved).
 
 ---
 
@@ -124,11 +122,11 @@ The server broadcasts JSON messages with an `event` type and associated `data`:
 
 ## 🔄 Project Flow
 
-1. **Identity Creation**: Users sign up with a pseudonym. No real names or emails are stored in the core reporting flow.
+1. **Identity Creation**: Users sign up with a pseudonym. No real names or emails are stored in the core flow.
 2. **Verification**: After signup/login, users verify their identity.
-3. **Reporting**: Verified users submit reports.
-4. **Engagement**: The community interacts with reports via votes and comments.
-5. **Resolution**: Admins can update report statuses as they are investigated and addressed.
+3. **Posting**: Verified users submit posts.
+4. **Engagement**: The community interacts with posts via votes and comments.
+5. **Resolution**: Admins can update post statuses as they are investigated and addressed.
 
 ---
 
