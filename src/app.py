@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from .core.websocket_manager import manager
 from .auth import auth_router 
 from .post.router import router as posts_router
 from .post_actions.router import router as post_actions_router
@@ -41,6 +42,18 @@ def on_startup():
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Ichtaka API"}
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and listen for any client messages if needed
+            data = await websocket.receive_text()
+            # Respond to ping or other control messages if necessary
+            await manager.send_personal_message({"type": "pong", "data": data}, websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 def start():
     """Launched with `uv run start` at root level"""

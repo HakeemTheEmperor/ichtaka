@@ -27,7 +27,7 @@ async def create_post(
     db: DB_SESSION,
     user: CURRENT_USER
 ):
-    post = service.create_post(db, user, data)
+    post = await service.create_post(db, user, data)
     resp = schemas.PostResponse.from_attributes(post)
     resp.pseudonym = user.pseudonym
     return {"message": "Post created successfully", "code": 201, "data": resp}
@@ -92,7 +92,7 @@ async def update_post(
 ):
     post_id = get_valid_post_id(id)
     # Optional: Add ownership check here
-    post = service.update_post(db, post_id, data)
+    post = await service.update_post(db, post_id, data)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
         
@@ -109,6 +109,6 @@ async def delete_post(
 ):
     post_id = get_valid_post_id(id)
     # Optional: Add ownership check here
-    if not service.delete_post(db, post_id):
+    if not await service.delete_post(db, post_id):
         raise HTTPException(status_code=404, detail="Post not found")
     return {"message": "Post deleted successfully", "code": 200, "data": None}

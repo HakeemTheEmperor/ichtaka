@@ -16,7 +16,7 @@ async def add_comment(
     user: CURRENT_USER
 ):
     post_id = get_valid_post_id(id)
-    comment = service.add_comment(db, user, post_id, data)
+    comment = await service.add_comment(db, user, post_id, data)
     resp = schemas.CommentResponse.from_attributes(comment)
     resp.pseudonym = user.pseudonym
     return {"message": "Comment added successfully", "code": 201, "data": resp}
@@ -29,7 +29,7 @@ async def cast_vote(
     user: CURRENT_USER
 ):
     post_id = get_valid_post_id(id)
-    post = service.cast_vote(db, user, post_id, vote_data.vote_type)
+    post = await service.cast_vote(db, user, post_id, vote_data.vote_type)
     # Return message and maybe truncated post data or just success
     return {"message": "Vote recorded", "code": 200, "data": None}
 
@@ -41,5 +41,5 @@ async def update_status(
 ):
     # TODO: Add admin check
     post_id = get_valid_post_id(id)
-    post = service.update_post_status(db, post_id, data.status)
+    post = await service.update_post_status(db, post_id, data.status)
     return {"message": f"Status updated to {data.status}", "code": 200, "data": None}

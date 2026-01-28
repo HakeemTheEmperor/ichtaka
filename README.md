@@ -87,6 +87,41 @@ _This command runs the server at `http://0.0.0.0:8000` with hot-reload enabled._
 
 ---
 
+## 🔌 Real-time Updates (WebSockets)
+
+Ichtaka supports real-time updates via WebSockets. Connect to the following endpoint to receive live event notifications:
+
+- **Endpoint**: `ws://localhost:8000/ws`
+
+### Supported Events
+
+The server broadcasts JSON messages with an `event` type and associated `data`:
+
+| Event           | Description                                |
+| :-------------- | :----------------------------------------- |
+| `new_post`      | Triggered when a new post is created.      |
+| `update_post`   | Triggered when a post is updated.          |
+| `delete_post`   | Triggered when a post is deleted.          |
+| `new_comment`   | Triggered when a new comment is added.     |
+| `vote_update`   | Triggered when a vote count changes.       |
+| `status_update` | Triggered when a post's status is changed. |
+
+### Example Message
+
+```json
+{
+  "event": "new_post",
+  "data": {
+    "id": 1,
+    "title": "Incident at Main St",
+    "severity": "High",
+    "created_at": "2026-01-28T10:00:00Z"
+  }
+}
+```
+
+---
+
 ## 🔄 Project Flow
 
 1. **Identity Creation**: Users sign up with a pseudonym. No real names or emails are stored in the core reporting flow.
