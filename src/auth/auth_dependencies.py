@@ -34,7 +34,8 @@ def get_current_user(
                 detail="User not found"
             )
         return user
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"

@@ -4,7 +4,7 @@ from src.post.models import Post, PostStatus
 from .models import Comment, Vote, VoteType
 from .schemas import CommentCreate, VoteRequest
 from src.auth.models.user_account import User_Account
-from src.utils.encoding import decode_base62
+from src.utils.encoding import decode_ids
 from src.core.websocket_manager import manager
 
 async def add_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
@@ -15,7 +15,7 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
     parent_id = None
     if data.parent_id:
         try:
-            parent_id = decode_base62(data.parent_id)
+            parent_id = decode_ids(data.parent_id)
         except (ValueError, KeyError):
             raise HTTPException(status_code=400, detail="Invalid parent_id format")
             

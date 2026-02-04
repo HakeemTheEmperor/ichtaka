@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, List, Any
 from datetime import datetime
-from src.utils.encoding import encode_base62
+from src.utils.encoding import encode_ids
 from src.post.models import PostStatus
 from .models import VoteType
 
@@ -23,14 +23,11 @@ class CommentResponse(CommentBase):
     class Config:
         from_attributes = True
 
-    @field_validator("id", "post_id", "parent_id", mode="before")
-    @classmethod
-    def encode_ids(cls, v: Any, info: Any) -> Any:
+    @field_serializer("id", "post_id", "parent_id")
+    def encode_ids(self, v: Any) -> Any:
         if v is None:
             return None
-        if isinstance(v, int):
-            return encode_base62(v)
-        return str(v)
+        return encode_ids(v)
 
 class VoteRequest(BaseModel):
     vote_type: VoteType

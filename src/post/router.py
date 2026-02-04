@@ -5,13 +5,13 @@ from . import service, schemas, models
 from src.auth.auth_dependencies import DB_SESSION, get_current_user, CURRENT_USER
 from src.auth.models.user_account import User_Account
 from src.core.schemas import APIResponse
-from src.utils.encoding import decode_base62
+from src.utils.encoding import decode_ids
 
 router = APIRouter()
 
 def get_valid_post_id(id: str) -> int:
     try:
-        return decode_base62(id)
+        return decode_ids(id)
     except (ValueError, KeyError):
         raise HTTPException(status_code=400, detail="Invalid post ID format")
 
@@ -27,38 +27,16 @@ async def create_post(
     db: DB_SESSION,
     user: CURRENT_USER
 ):
-    post = await service.create_post(db, user, data)
-    resp = schemas.PostResponse.from_attributes(post)
-    resp.pseudonym = user.pseudonym
-    return {"message": "Post created successfully", "code": 201, "data": resp}
+    return await service.create_post(db, user, data)
+    
 
 @router.get("/", response_model=APIResponse[schemas.FeedResponse])
 async def get_feed(
     db: DB_SESSION,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    post_status: Optional[models.PostStatus] = None
 ):
-    posts, total = service.get_feed(db, page, limit, post_status)
-    
-    post_responses = []
-    for p in posts:
-        resp = schemas.PostResponse.from_attributes(p)
-        if p.author:
-            resp.pseudonym = p.author.pseudonym
-            
-        # Map only root comments
-        root_comments_objs = [c for c in p.comments if c.parent_id is None]
-        from src.post_actions.schemas import CommentResponse # Import here to avoid circularity if any
-        resp.comments = [CommentResponse.from_attributes(c) for c in root_comments_objs]
-        
-        for c_obj, c_schema in zip(root_comments_objs, resp.comments):
-            enrich_comment(c_obj, c_schema)
-            
-        post_responses.append(resp)
-        
-    data = schemas.FeedResponse(posts=post_responses, total=total, page=page, limit=limit)
-    return {"message": "Feed fetched successfully", "code": 200, "data": data}
+    return service.get_feed(db, page, limit)
 
 @router.get("/{id}", response_model=APIResponse[schemas.PostResponse])
 async def get_post(

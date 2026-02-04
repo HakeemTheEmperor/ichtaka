@@ -1,30 +1,22 @@
 import string
 
-# Characters for Base62: 0-9, a-z, A-Z
-CHARSET = string.digits + string.ascii_lowercase + string.ascii_uppercase
+# Shuffled Base 52 (No vowels: a, e, i, o, u, A, E, I, O, U)
+CHARSET = "N2Z7P9K6R3V8T4BX5W1GYQSDFHJLMC0bgjknpqrstvwxyzHJKMNPQRSTVWXYZ"
+BASE = len(CHARSET)
 
-def encode_base62(num: int) -> str:
-    """Encodes a positive integer to a Base62 string."""
-    if num == 0:
-        return CHARSET[0]
-    
+# Offset for 6-character minimum (52^5 = 380,204,032)
+MIN_LENGTH_OFFSET = BASE**5 
+
+def encode_ids(num: int) -> str:
+    internal_num = num + MIN_LENGTH_OFFSET
     arr = []
-    base = len(CHARSET)
-    while num:
-        num, rem = divmod(num, base)
+    while internal_num > 0:
+        internal_num, rem = divmod(internal_num, BASE)
         arr.append(CHARSET[rem])
-    arr.reverse()
-    return ''.join(arr)
+    return ''.join(reversed(arr))
 
-def decode_base62(s: str) -> int:
-    """Decodes a Base62 string to a positive integer."""
-    base = len(CHARSET)
-    strlen = len(s)
+def decode_ids(s: str) -> int:
     num = 0
-    
-    idx = 0
-    for char in s:
-        power = (strlen - (idx + 1))
-        num += CHARSET.index(char) * (base ** power)
-        idx += 1
-    return num
+    for i, char in enumerate(reversed(s)):
+        num += CHARSET.index(char) * (BASE ** i)
+    return num - MIN_LENGTH_OFFSET
