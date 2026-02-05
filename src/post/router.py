@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from . import service, schemas, models
-from src.auth.auth_dependencies import DB_SESSION, get_current_user, CURRENT_USER
+from src.auth.auth_dependencies import DB_SESSION, get_current_user, CURRENT_USER, get_optional_current_user
 from src.auth.models.user_account import User_Account
 from src.core.schemas import APIResponse
 from src.utils.encoding import decode_ids
@@ -33,15 +33,17 @@ async def create_post(
 @router.get("/", response_model=APIResponse[schemas.FeedResponse])
 async def get_feed(
     db: DB_SESSION,
+    user: Optional[User_Account] = Depends(get_optional_current_user), # Use dependency directly or define alias in router
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
 ):
-    return service.get_feed(db, page, limit)
+    return service.get_feed(db, page, limit, user)
 
 @router.get("/{id}", response_model=APIResponse[schemas.PostResponse])
 async def get_post(
     id: str,
-    db: DB_SESSION
+    db: DB_SESSION,
+    user: Optional[User_Account] = Depends(get_optional_current_user)
 ):
     post_id = get_valid_post_id(id)
     post = service.get_post(db, post_id)
@@ -51,10 +53,17 @@ async def get_post(
     resp = schemas.PostResponse.from_attributes(post)
     if post.author:
             resp.pseudonym = post.author.pseudonym
+    
+    # Check for user vote
+    if user:
+        from src.post_actions.models import Vote
+        vote = db.query(Vote).filter(Vote.post_id == post.id, Vote.user_id == user.id).first()
+        if vote:
+            resp.user_vote_status = vote.vote_type.value
             
     root_comments_objs = [c for c in post.comments if c.parent_id is None]
     from src.post_actions.schemas import CommentResponse
-    resp.comments = [CommentResponse.from_attributes(c) for c in root_comments_objs]
+    resp.comments = [CommentResponse.model_validate(c) for c in root_comments_objs]
     
     for c_obj, c_schema in zip(root_comments_objs, resp.comments):
         enrich_comment(c_obj, c_schema)

@@ -33,10 +33,12 @@ class PostResponse(PostBase):
     status: PostStatus
     upvotes_count: int
     downvotes_count: int
+    comments_count: int = 0
     created_at: datetime
     updated_at: datetime
     # Comments will be handled by PostActions schemas or a separate inclusion
     comments: List[Any] = []
+    user_vote_status: Optional[str] = "none"
 
     class Config:
         from_attributes = True

@@ -12,10 +12,10 @@ class CommentCreate(CommentBase):
     parent_id: Optional[str] = None # Expecting Base62 string
 
 class CommentResponse(CommentBase):
-    id: str
+    id: int
     user_id: int
-    post_id: str
-    parent_id: Optional[str] = None
+    post_id: int
+    parent_id: Optional[int] = None
     pseudonym: Optional[str] = None
     created_at: datetime
     replies: List["CommentResponse"] = []
@@ -24,9 +24,9 @@ class CommentResponse(CommentBase):
         from_attributes = True
 
     @field_serializer("id", "post_id", "parent_id")
-    def encode_ids(self, v: Any) -> Any:
+    def serialize_ids(self, v: int) -> str:
         if v is None:
-            return None
+            return ""
         return encode_ids(v)
 
 class VoteRequest(BaseModel):

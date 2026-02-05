@@ -43,7 +43,14 @@ async def create_post(db: Session, user: User_Account, data: PostCreate) -> Succ
     )
     
 
-def get_feed(db: Session, page: int = 1, limit: int = 10):
+
+def enrich_comment(comment_obj, comment_schema):
+    if comment_obj.author:
+        comment_schema.pseudonym = comment_obj.author.pseudonym
+    for sub_obj, sub_schema in zip(comment_obj.replies, comment_schema.replies):
+        enrich_comment(sub_obj, sub_schema)
+
+def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = None):
     query = db.query(Post)
     
     # For admins copy this line
@@ -55,19 +62,35 @@ def get_feed(db: Session, page: int = 1, limit: int = 10):
     total = query.count()
     posts = query.order_by(Post.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
     
+    # Batch fetch votes if user is logged in
+    user_votes_map = {}
+    if user:
+        from src.post_actions.models import Vote
+        post_ids = [p.id for p in posts]
+        votes = db.query(Vote).filter(
+            Vote.post_id.in_(post_ids),
+            Vote.user_id == user.id
+        ).all()
+        user_votes_map = {v.post_id: v.vote_type.value for v in votes}
+    
     post_responses = []
     for p in posts:
         resp = PostResponse.model_validate(p)
         if p.author:
             resp.pseudonym = p.author.pseudonym
-            
-        # Map only root comments
-        root_comments_objs = [c for c in p.comments if c.parent_id is None]
-        from src.post_actions.schemas import CommentResponse # Import here to avoid circularity if any
-        resp.comments = [CommentResponse.from_attributes(c) for c in root_comments_objs]
         
-        for c_obj, c_schema in zip(root_comments_objs, resp.comments):
-            enrich_comment(c_obj, c_schema)
+        # Set user vote status
+        resp.user_vote_status = user_votes_map.get(p.id, "none")
+            
+        # Lazy loading comments: just count them
+        resp.comments_count = len(p.comments) # This uses the relationship, might trigger load if not careful, but usually acceptable for small sets or joined query. 
+        # Ideally using a count query is better for performance but this is a start.
+        # Actually p.comments might be lazy loaded. 
+        # Let's clean comments list to avoid huge payload
+        resp.comments = []
+        
+        # for c_obj, c_schema in zip(root_comments_objs, resp.comments):
+        #    enrich_comment(c_obj, c_schema)
             
         post_responses.append(resp)
     data = FeedResponse(posts=post_responses, total=total, page=page, limit=limit, totalPages=math.ceil(total/limit))

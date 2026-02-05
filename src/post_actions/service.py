@@ -6,6 +6,7 @@ from .schemas import CommentCreate, VoteRequest
 from src.auth.models.user_account import User_Account
 from src.utils.encoding import decode_ids
 from src.core.websocket_manager import manager
+from src.core.utils.response import SuccessResponse
 
 async def add_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
     post = db.query(Post).filter(Post.id == post_id).first()
@@ -49,6 +50,8 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
             "post_id": post_id,
             "comment_id": new_comment.id,
             "parent_id": data.parent_id,
+            "content": new_comment.content,
+            "pseudonym": user.pseudonym,
             "created_at": new_comment.created_at.isoformat() if new_comment.created_at else None
         }
     })
@@ -65,6 +68,7 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
         Vote.user_id == user.id
     ).first()
     
+    new_vote_status = "none"
     if existing_vote:
         if existing_vote.vote_type == vote_type:
             # Toggle off
@@ -75,8 +79,8 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
                 post.downvotes_count -= 1
         else:
             # Change vote type
-            old_type = existing_vote.vote_type
             existing_vote.vote_type = vote_type
+            new_vote_status = vote_type.value
             if vote_type == VoteType.UPVOTE:
                 post.upvotes_count += 1
                 post.downvotes_count -= 1
@@ -91,6 +95,7 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
             vote_type=vote_type
         )
         db.add(new_vote)
+        new_vote_status = vote_type.value
         if vote_type == VoteType.UPVOTE:
             post.upvotes_count += 1
         else:
@@ -109,7 +114,15 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
         }
     })
     
-    return post
+    return SuccessResponse(
+        message="Vote recorded", 
+        code=status.HTTP_200_OK, 
+        data={
+            "user_vote_status": new_vote_status,
+            "upvotes": post.upvotes_count,
+            "downvotes": post.downvotes_count
+        }
+    )
 
 async def update_post_status(db: Session, post_id: int, new_status: PostStatus):
     post = db.query(Post).filter(Post.id == post_id).first()
@@ -130,3 +143,26 @@ async def update_post_status(db: Session, post_id: int, new_status: PostStatus):
     })
     
     return post
+
+def enrich_comment(comment_obj, comment_schema):
+    if comment_obj.author:
+        comment_schema.pseudonym = comment_obj.author.pseudonym
+    for sub_obj, sub_schema in zip(comment_obj.replies, comment_schema.replies):
+        enrich_comment(sub_obj, sub_schema)
+
+def get_comments(db: Session, post_id: int):
+    # Fetch all top-level comments for the post
+    # Eager loading replies would be good but standard lazy loading might suffice for now
+    # We filter by parent_id IS NULL to get roots
+    root_comments = db.query(Comment).filter(
+        Comment.post_id == post_id,
+        Comment.parent_id == None
+    ).order_by(Comment.created_at.desc()).all()
+    
+    from .schemas import CommentResponse
+    comment_responses = [CommentResponse.model_validate(c) for c in root_comments]
+    
+    for c_obj, c_schema in zip(root_comments, comment_responses):
+        enrich_comment(c_obj, c_schema)
+        
+    return comment_responses
