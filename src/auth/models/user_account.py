@@ -11,3 +11,6 @@ class User_Account(Base):
     recovery_phrase_hashes = Column(JSON, nullable=False)  # list of 20 hashed words
     pseudonym = Column(String, unique=True, nullable=False)
     
+    from sqlalchemy.orm import relationship
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    

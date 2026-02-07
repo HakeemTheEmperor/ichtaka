@@ -67,7 +67,9 @@ _This command runs the server at `http://0.0.0.0:8000` with hot-reload enabled._
 - `GET  /check-username`: Check if a pseudonym is already in use.
 - `POST /signup`: Create a new anonymous account.
 - `POST /login`: Login to the platform.
-- `POST /verify`: Dual-factor/Verification step after signup/login.
+- `POST /verify`: Dual-factor/Verification step after signup/login. Returns access and refresh tokens.
+- `POST /refresh`: Rotate access token using a valid refresh token.
+- `POST /logout`: Invalidate the current refresh token.
 
 ### Posts (`/v1/posts`)
 
@@ -122,11 +124,12 @@ The server broadcasts JSON messages with an `event` type and associated `data`:
 
 ## 🔄 Project Flow
 
-1. **Identity Creation**: Users sign up with a pseudonym. No real names or emails are stored in the core flow.
-2. **Verification**: After signup/login, users verify their identity.
-3. **Posting**: Verified users submit posts.
-4. **Engagement**: The community interacts with posts via votes and comments.
-5. **Resolution**: Admins can update post statuses as they are investigated and addressed.
+1. **Identity Creation**: Users sign up with a pseudonym. No real names or emails are stored.
+2. **Verification & Tokens**: After signup/login, users verify their identity. The system issues a short-lived **Access Token** and a long-lived **Refresh Token** (hashed in DB).
+3. **Persistent Session**: The frontend stores tokens and uses an **Axios Interceptor** to automatically rotate expired access tokens without user interruption.
+4. **Posting & Engagement**: Verified users submit posts, vote (real-time sync), and engage via **Nested Replies**.
+5. **Real-time Sync**: Global WebSockets ensure that votes and comments appear instantly for all users.
+6. **Resolution**: Admins can update post statuses as they are investigated and addressed.
 
 ---
 

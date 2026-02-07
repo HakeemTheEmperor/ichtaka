@@ -38,5 +38,9 @@ class LoginResponse(BaseModel):
 
 class VerifyResponse(BaseModel):
     user_id: int
-    token: str
+    access_token: str
+    refresh_token: str
     pseudonym: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

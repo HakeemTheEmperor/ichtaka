@@ -12,7 +12,32 @@ from src.auth.crypto import verify_ed25519_signature
 
 JWT_SECRET = settings.JWT_SECRET_KEY
 JWT_ALG = settings.JWT_ALGORITHM
-JWT_EXP_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+ACCESS_TOKEN_EXP_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXP_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+
+from .models.refresh_token import RefreshToken
+import hashlib
+
+def get_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXP_MINUTES)
+    to_encode.update({"exp": expire, "type": "access"})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALG)
+    print(encoded_jwt)
+    return encoded_jwt
+
+def create_refresh_token(user_id: int):
+    # Generate a random token
+    raw_token = secrets.token_urlsafe(64)
+    # Hash it for storage
+    token_hash = get_token_hash(raw_token)
+    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXP_DAYS)
+    
+    return raw_token, token_hash, expires_at
 
 def generate_login_id():
     return f"user_{secrets.token_hex(8)}"
@@ -87,12 +112,25 @@ def verify_auth(db: Session, data: VerifyRequest):
         db.commit()
         raise InvalidSignature('Authentication Failed')
     
-    payload = {
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+    
+    
+    # Generate Tokens
+    access_token_payload = {
         "sub": str(user.id),
         "pseudonym": user.pseudonym,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    access_token = create_access_token(access_token_payload)
+    
+    raw_refresh_token, refresh_token_hash, refresh_expires_at = create_refresh_token(user.id)
+    
+    # Store refresh token
+    new_refresh_token_entry = RefreshToken(
+        user_id=user.id,
+        token_hash=refresh_token_hash,
+        expires_at=refresh_expires_at
+    )
+    db.add(new_refresh_token_entry)
     
     user.current_challenge = None
     db.add(user)
@@ -102,8 +140,50 @@ def verify_auth(db: Session, data: VerifyRequest):
     return SuccessResponse(
         message="Authentication successful.", 
         code=status.HTTP_200_OK, 
-        data=VerifyResponse(user_id=user.id, token=token, pseudonym=user.pseudonym)
+        data=VerifyResponse(
+            user_id=user.id, 
+            access_token=access_token, 
+            refresh_token=raw_refresh_token,
+            pseudonym=user.pseudonym
+        )
     )
+
+def refresh_access_token(db: Session, refresh_token: str):
+    token_hash = get_token_hash(refresh_token)
+    
+    db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
+    if not db_token:
+        raise NotFound("Invalid refresh token")
+        
+    if db_token.expires_at < datetime.utcnow():
+        db.delete(db_token)
+        db.commit()
+        raise InvalidSignature("Refresh token expired")
+        
+    # Generate new access token
+    # We need user details.
+    user = db_token.user
+    if not user:
+        # Should not happen due to FK
+        raise NotFound("User not found")
+        
+    access_token_payload = {
+        "sub": str(user.id),
+        "pseudonym": user.pseudonym,
+    }
+    new_access_token = create_access_token(access_token_payload)
+    
+    return SuccessResponse(
+        message="Token refreshed",
+        code=status.HTTP_200_OK,
+        data={"access_token": new_access_token}
+    )
+
+def logout(db: Session, refresh_token: str):
+    token_hash = get_token_hash(refresh_token)
+    db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).delete()
+    db.commit()
+    return SuccessResponse(message="Logged out successfully", code=status.HTTP_200_OK)
     
     
     

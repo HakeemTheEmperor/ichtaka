@@ -1,6 +1,6 @@
 from fastapi import APIRouter,  status
 from sqlalchemy.orm import Session
-from .auth_schemas import SignupRequest, SignUpResponse,VerifyRequest, VerifyResponse, LoginRequest, LoginResponse
+from .auth_schemas import SignupRequest, SignUpResponse,VerifyRequest, VerifyResponse, LoginRequest, LoginResponse, RefreshTokenRequest
 from . import auth_service
 from .auth_dependencies import DB_SESSION, CURRENT_USER
 from src.core.schemas import APIResponse
@@ -22,3 +22,11 @@ async def login(data: LoginRequest, db: DB_SESSION):
 @router.post("/verify", response_model=APIResponse[VerifyResponse], description='Verification. After signup/login', name="Verify Identity")
 async def verifyAuth(data: VerifyRequest, db: DB_SESSION):
     return auth_service.verify_auth(db, data=data)
+
+@router.post("/refresh", response_model=APIResponse[dict], description="Refresh access token using refresh token", name="Refresh Token")
+async def refreshToken(data: RefreshTokenRequest, db: DB_SESSION):
+    return auth_service.refresh_access_token(db, refresh_token=data.refresh_token)
+
+@router.post("/logout", response_model=APIResponse[None], description="Logout user and invalidate refresh token", name="Logout")
+async def logout(data: RefreshTokenRequest, db: DB_SESSION):
+    return auth_service.logout(db, refresh_token=data.refresh_token)
