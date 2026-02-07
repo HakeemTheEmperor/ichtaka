@@ -36,8 +36,9 @@ async def get_feed(
     user: Optional[User_Account] = Depends(get_optional_current_user), # Use dependency directly or define alias in router
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    pseudonym: Optional[str] = Query(None)
 ):
-    return service.get_feed(db, page, limit, user)
+    return service.get_feed(db, page, limit, user, pseudonym)
 
 @router.get("/{id}", response_model=APIResponse[schemas.PostResponse])
 async def get_post(

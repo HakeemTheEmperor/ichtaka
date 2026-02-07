@@ -13,4 +13,6 @@ class User_Account(Base):
     
     from sqlalchemy.orm import relationship
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    followers = relationship("Follow", foreign_keys="[Follow.followed_id]", back_populates="followed", cascade="all, delete-orphan")
+    following = relationship("Follow", foreign_keys="[Follow.follower_id]", back_populates="follower", cascade="all, delete-orphan")
     

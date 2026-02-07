@@ -6,6 +6,7 @@ from src.config import settings
 from src.auth.models.user_account import User_Account
 from src.database import get_db
 from typing import Annotated, Optional
+from .blacklist_service import blacklist
 
 security = HTTPBearer()
 DB_SESSION = Annotated[Session, Depends(get_db)]
@@ -14,6 +15,11 @@ def get_current_user(
     db: DB_SESSION,
     auth: HTTPAuthorizationCredentials = Depends(security)
 ) -> User_Account:
+    if blacklist.is_blacklisted(auth.credentials):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked: please log in again"
+        )
     try:
         payload = jwt.decode(
             auth.credentials, 
@@ -50,6 +56,8 @@ def get_optional_current_user(
     auth: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)
 ) -> Optional[User_Account]:
     if not auth:
+        return None
+    if blacklist.is_blacklisted(auth.credentials):
         return None
     try:
         payload = jwt.decode(

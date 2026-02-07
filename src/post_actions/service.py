@@ -4,9 +4,10 @@ from src.post.models import Post, PostStatus
 from .models import Comment, Vote, VoteType
 from .schemas import CommentCreate, VoteRequest
 from src.auth.models.user_account import User_Account
-from src.utils.encoding import decode_ids
-from src.core.websocket_manager import manager
 from src.core.utils.response import SuccessResponse
+from src.notifications.service import create_notification
+from src.utils.encoding import decode_ids, encode_ids
+import asyncio
 
 async def add_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
     post = db.query(Post).filter(Post.id == post_id).first()
@@ -56,6 +57,17 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
         }
     })
     
+    # Notify post author
+    if post.user_id and post.user_id != user.id:
+        asyncio.create_task(create_notification(
+            db,
+            recipient_id=post.user_id,
+            type="comment",
+            message=f"{user.pseudonym} commented on your post: {post.title[:30]}...",
+            sender_id=user.id,
+            post_id=encode_ids(post_id)
+        ))
+    
     return new_comment
 
 async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
@@ -98,6 +110,16 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
         new_vote_status = vote_type.value
         if vote_type == VoteType.UPVOTE:
             post.upvotes_count += 1
+            # Notify post author on upvote
+            if post.user_id and post.user_id != user.id:
+                asyncio.create_task(create_notification(
+                    db,
+                    recipient_id=post.user_id,
+                    type="like",
+                    message=f"{user.pseudonym} upvoted your post: {post.title[:30]}...",
+                    sender_id=user.id,
+                    post_id=encode_ids(post_id)
+                ))
         else:
             post.downvotes_count += 1
             

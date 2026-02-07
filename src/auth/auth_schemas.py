@@ -44,3 +44,7 @@ class VerifyResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+class UserListResponse(BaseModel):
+    pseudonym: str
+    is_following: bool = False

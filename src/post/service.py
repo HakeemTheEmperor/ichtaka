@@ -5,6 +5,9 @@ from .schemas import PostCreate, PostUpdate, PostResponse, FeedResponse
 from src.auth.models.user_account import User_Account
 from src.core.websocket_manager import manager
 from src.core.utils.response import SuccessResponse
+from src.notifications.service import create_notification
+from src.utils.encoding import encode_ids
+import asyncio
 import math
 
 async def create_post(db: Session, user: User_Account, data: PostCreate) -> SuccessResponse :
@@ -33,6 +36,18 @@ async def create_post(db: Session, user: User_Account, data: PostCreate) -> Succ
         }
     })
     
+    # Notify followers
+    if user:
+        for f in user.followers:
+            asyncio.create_task(create_notification(
+                db,
+                recipient_id=f.follower_id,
+                type="new_post",
+                message=f"{user.pseudonym} just posted: {new_post.title[:30]}...",
+                sender_id=user.id,
+                post_id=encode_ids(new_post.id)
+            ))
+    
     resp = PostResponse.model_validate(new_post)
     resp.pseudonym = user.pseudonym
     
@@ -50,8 +65,11 @@ def enrich_comment(comment_obj, comment_schema):
     for sub_obj, sub_schema in zip(comment_obj.replies, comment_schema.replies):
         enrich_comment(sub_obj, sub_schema)
 
-def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = None):
+def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = None, pseudonym: str = None):
     query = db.query(Post)
+    
+    if pseudonym:
+        query = query.join(User_Account).filter(User_Account.pseudonym == pseudonym)
     
     # For admins copy this line
     # if status_filter:

@@ -3,8 +3,8 @@ import jwt
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi import status
-from .models import User_Account
-from .auth_schemas import SignupRequest, SignUpResponse, VerifyRequest, VerifyResponse, LoginRequest, LoginResponse
+from .models import User_Account, Follow
+from .auth_schemas import SignupRequest, SignUpResponse, VerifyRequest, VerifyResponse, LoginRequest, LoginResponse, UserListResponse
 from src.config import settings
 from src.core.errors.exceptions import (AlreadyExists, NotFound, InvalidSignature)
 from src.core.utils.response import SuccessResponse
@@ -179,11 +179,114 @@ def refresh_access_token(db: Session, refresh_token: str):
         data={"access_token": new_access_token}
     )
 
-def logout(db: Session, refresh_token: str):
+def logout(db: Session, refresh_token: str, access_token: str = None):
     token_hash = get_token_hash(refresh_token)
     db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).delete()
+    if access_token:
+        from .blacklist_service import blacklist
+        blacklist.add(access_token)
     db.commit()
     return SuccessResponse(message="Logged out successfully", code=status.HTTP_200_OK)
+
+def toggle_follow(db: Session, follower: User_Account, target_pseudonym: str):
+    target_user = db.query(User_Account).filter(User_Account.pseudonym == target_pseudonym).first()
+    if not target_user:
+        raise NotFound("Target user not found")
+    
+    if target_user.id == follower.id:
+        raise InvalidSignature("You cannot follow yourself")
+    
+    existing_follow = db.query(Follow).filter(
+        Follow.follower_id == follower.id,
+        Follow.followed_id == target_user.id
+    ).first()
+    
+    if existing_follow:
+        db.delete(existing_follow)
+        db.commit()
+        return SuccessResponse(message=f"Unfollowed {target_pseudonym}", code=status.HTTP_200_OK, data={"is_following": False})
+    
+    new_follow = Follow(follower_id=follower.id, followed_id=target_user.id)
+    db.add(new_follow)
+    db.commit()
+    
+    from src.notifications.service import create_notification
+    import asyncio
+    asyncio.create_task(create_notification(
+        db, 
+        recipient_id=target_user.id, 
+        type="follow", 
+        message=f"{follower.pseudonym} followed you", 
+        sender_id=follower.id
+    ))
+    
+    return SuccessResponse(message=f"Followed {target_pseudonym}", code=status.HTTP_201_CREATED, data={"is_following": True})
+
+def get_followers(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    followers = []
+    for f in user.followers:
+        is_following = False
+        if current_user:
+            is_following = db.query(Follow).filter(
+                Follow.follower_id == current_user.id,
+                Follow.followed_id == f.follower.id
+            ).first() is not None
+        
+        followers.append(UserListResponse(
+            pseudonym=f.follower.pseudonym,
+            is_following=is_following
+        ))
+    
+    return SuccessResponse(message="Followers fetched", data=followers)
+
+def get_following(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    following = []
+    for f in user.following:
+        is_following = True # They are in the following list
+        # If current_user is different, we check if current_user follows this person
+        if current_user and current_user.id != user.id:
+            is_following = db.query(Follow).filter(
+                Follow.follower_id == current_user.id,
+                Follow.followed_id == f.followed.id
+            ).first() is not None
+            
+        following.append(UserListResponse(
+            pseudonym=f.followed.pseudonym,
+            is_following=is_following
+        ))
+    
+    return SuccessResponse(message="Following list fetched", data=following)
+    
+def get_user_profile(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    is_following = False
+    if current_user:
+        is_following = db.query(Follow).filter(
+            Follow.follower_id == current_user.id,
+            Follow.followed_id == user.id
+        ).first() is not None
+        
+    from src.post.models import Post
+    data = {
+        "id": user.id,
+        "pseudonym": user.pseudonym,
+        "followers_count": len(user.followers),
+        "following_count": len(user.following),
+        "is_following": is_following,
+        "posts_count": db.query(Post).filter(Post.user_id == user.id).count()
+    }
+    return SuccessResponse(message="User profile fetched", data=data)
     
     
     
