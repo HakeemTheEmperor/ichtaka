@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, Request, Response
 from .auth_dependencies import DB_SESSION, CURRENT_USER, get_current_user, HTTPAuthorizationCredentials, security, get_optional_current_user
 from .import auth_service as service, auth_schemas as schemas
 from .models import User_Account
@@ -28,16 +28,18 @@ async def login(data: schemas.LoginRequest, db: DB_SESSION):
     return service.login(db, data=data)
 
 @router.post("/verify", response_model=APIResponse[schemas.VerifyResponse], description='Verification. After signup/login', name="Verify Identity")
-async def verifyAuth(data: schemas.VerifyRequest, db: DB_SESSION):
-    return service.verify_auth(db, data=data)
+async def verifyAuth(data: schemas.VerifyRequest, db: DB_SESSION, response: Response):
+    return service.verify_auth(db, data=data, response=response)
 
 @router.post("/refresh", response_model=APIResponse[dict], description="Refresh access token using refresh token", name="Refresh Token")
-async def refreshToken(data: schemas.RefreshTokenRequest, db: DB_SESSION):
-    return service.refresh_access_token(db, refresh_token=data.refresh_token)
+async def refreshToken(db: DB_SESSION, request: Request, response: Response, data: Optional[schemas.RefreshTokenRequest] = None):
+    refresh_token = data.refresh_token if data else request.cookies.get("refresh_token")
+    return service.refresh_access_token(db, refresh_token=refresh_token, response=response)
 
 @router.post("/logout", response_model=APIResponse[None], description="Logout user and invalidate refresh token", name="Logout")
-async def logout(data: schemas.RefreshTokenRequest, db: DB_SESSION, auth: HTTPAuthorizationCredentials = Depends(security)):
-    return service.logout(db, refresh_token=data.refresh_token, access_token=auth.credentials)
+async def logout(db: DB_SESSION, request: Request, response: Response, data: Optional[schemas.RefreshTokenRequest] = None, auth: HTTPAuthorizationCredentials = Depends(security)):
+    refresh_token = data.refresh_token if data else request.cookies.get("refresh_token")
+    return service.logout(db, refresh_token=refresh_token, access_token=auth.credentials, response=response)
 
 @router.post("/{pseudonym}/follow", response_model=APIResponse[Any])
 async def toggle_follow(

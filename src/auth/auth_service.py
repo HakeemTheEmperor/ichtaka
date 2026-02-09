@@ -97,7 +97,7 @@ def check_username(db: Session, user_name: str):
         raise AlreadyExists('The pseudonym is already in use')
     return SuccessResponse(message="Pseudonym available", code=200, data={"is_available": True})
 
-def verify_auth(db: Session, data: VerifyRequest):
+def verify_auth(db: Session, data: VerifyRequest, response: Response):
     user = db.query(User_Account).filter(User_Account.pseudonym == data.pseudonym).first()
     if not user:
         raise NotFound('This user account does not exist.')
@@ -137,6 +137,24 @@ def verify_auth(db: Session, data: VerifyRequest):
     db.commit()
     db.refresh(user)
     
+    # Set cookies
+    response.set_cookie(
+        key="auth_token",
+        value=access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=raw_refresh_token,
+        httponly=True,
+        max_age=REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+
     return SuccessResponse(
         message="Authentication successful.", 
         code=status.HTTP_200_OK, 
@@ -148,7 +166,9 @@ def verify_auth(db: Session, data: VerifyRequest):
         )
     )
 
-def refresh_access_token(db: Session, refresh_token: str):
+def refresh_access_token(db: Session, refresh_token: str, response: Response):
+    if not refresh_token:
+        raise NotFound("Refresh token missing")
     token_hash = get_token_hash(refresh_token)
     
     db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
@@ -173,19 +193,35 @@ def refresh_access_token(db: Session, refresh_token: str):
     }
     new_access_token = create_access_token(access_token_payload)
     
+    # Update access token cookie
+    response.set_cookie(
+        key="auth_token",
+        value=new_access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+
     return SuccessResponse(
         message="Token refreshed",
         code=status.HTTP_200_OK,
         data={"access_token": new_access_token}
     )
 
-def logout(db: Session, refresh_token: str, access_token: str = None):
-    token_hash = get_token_hash(refresh_token)
-    db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).delete()
+def logout(db: Session, refresh_token: str, response: Response, access_token: str = None):
+    if refresh_token:
+        token_hash = get_token_hash(refresh_token)
+        db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).delete()
     if access_token:
         from .blacklist_service import blacklist
         blacklist.add(access_token)
     db.commit()
+
+    # Clear cookies
+    response.delete_cookie("auth_token")
+    response.delete_cookie("refresh_token")
+
     return SuccessResponse(message="Logged out successfully", code=status.HTTP_200_OK)
 
 def toggle_follow(db: Session, follower: User_Account, target_pseudonym: str):
