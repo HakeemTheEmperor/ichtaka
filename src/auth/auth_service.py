@@ -3,8 +3,8 @@ import jwt
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi import status
-from .models import User_Account
-from .auth_schemas import SignupRequest, SignUpResponse, VerifyRequest, VerifyResponse, LoginRequest, LoginResponse
+from .models import User_Account, Follow
+from .auth_schemas import SignupRequest, SignUpResponse, VerifyRequest, VerifyResponse, LoginRequest, LoginResponse, UserListResponse
 from src.config import settings
 from src.core.errors.exceptions import (AlreadyExists, NotFound, InvalidSignature)
 from src.core.utils.response import SuccessResponse
@@ -12,7 +12,32 @@ from src.auth.crypto import verify_ed25519_signature
 
 JWT_SECRET = settings.JWT_SECRET_KEY
 JWT_ALG = settings.JWT_ALGORITHM
-JWT_EXP_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+ACCESS_TOKEN_EXP_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXP_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+
+from .models.refresh_token import RefreshToken
+import hashlib
+
+def get_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXP_MINUTES)
+    to_encode.update({"exp": expire, "type": "access"})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALG)
+    print(encoded_jwt)
+    return encoded_jwt
+
+def create_refresh_token(user_id: int):
+    # Generate a random token
+    raw_token = secrets.token_urlsafe(64)
+    # Hash it for storage
+    token_hash = get_token_hash(raw_token)
+    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXP_DAYS)
+    
+    return raw_token, token_hash, expires_at
 
 def generate_login_id():
     return f"user_{secrets.token_hex(8)}"
@@ -72,7 +97,7 @@ def check_username(db: Session, user_name: str):
         raise AlreadyExists('The pseudonym is already in use')
     return SuccessResponse(message="Pseudonym available", code=200, data={"is_available": True})
 
-def verify_auth(db: Session, data: VerifyRequest):
+def verify_auth(db: Session, data: VerifyRequest, response: Response):
     user = db.query(User_Account).filter(User_Account.pseudonym == data.pseudonym).first()
     if not user:
         raise NotFound('This user account does not exist.')
@@ -87,23 +112,217 @@ def verify_auth(db: Session, data: VerifyRequest):
         db.commit()
         raise InvalidSignature('Authentication Failed')
     
-    payload = {
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+    
+    
+    # Generate Tokens
+    access_token_payload = {
         "sub": str(user.id),
         "pseudonym": user.pseudonym,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES)
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    access_token = create_access_token(access_token_payload)
+    
+    raw_refresh_token, refresh_token_hash, refresh_expires_at = create_refresh_token(user.id)
+    
+    # Store refresh token
+    new_refresh_token_entry = RefreshToken(
+        user_id=user.id,
+        token_hash=refresh_token_hash,
+        expires_at=refresh_expires_at
+    )
+    db.add(new_refresh_token_entry)
     
     user.current_challenge = None
     db.add(user)
     db.commit()
     db.refresh(user)
     
+    # Set cookies
+    response.set_cookie(
+        key="auth_token",
+        value=access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=raw_refresh_token,
+        httponly=True,
+        max_age=REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+
     return SuccessResponse(
         message="Authentication successful.", 
         code=status.HTTP_200_OK, 
-        data=VerifyResponse(user_id=user.id, token=token)
+        data=VerifyResponse(
+            user_id=user.id, 
+            access_token=access_token, 
+            refresh_token=raw_refresh_token,
+            pseudonym=user.pseudonym
+        )
     )
+
+def refresh_access_token(db: Session, refresh_token: str, response: Response):
+    if not refresh_token:
+        raise NotFound("Refresh token missing")
+    token_hash = get_token_hash(refresh_token)
+    
+    db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
+    if not db_token:
+        raise NotFound("Invalid refresh token")
+        
+    if db_token.expires_at < datetime.utcnow():
+        db.delete(db_token)
+        db.commit()
+        raise InvalidSignature("Refresh token expired")
+        
+    # Generate new access token
+    # We need user details.
+    user = db_token.user
+    if not user:
+        # Should not happen due to FK
+        raise NotFound("User not found")
+        
+    access_token_payload = {
+        "sub": str(user.id),
+        "pseudonym": user.pseudonym,
+    }
+    new_access_token = create_access_token(access_token_payload)
+    
+    # Update access token cookie
+    response.set_cookie(
+        key="auth_token",
+        value=new_access_token,
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production"
+    )
+
+    return SuccessResponse(
+        message="Token refreshed",
+        code=status.HTTP_200_OK,
+        data={"access_token": new_access_token}
+    )
+
+def logout(db: Session, refresh_token: str, response: Response, access_token: str = None):
+    if refresh_token:
+        token_hash = get_token_hash(refresh_token)
+        db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).delete()
+    if access_token:
+        from .blacklist_service import blacklist
+        blacklist.add(access_token)
+    db.commit()
+
+    # Clear cookies
+    response.delete_cookie("auth_token")
+    response.delete_cookie("refresh_token")
+
+    return SuccessResponse(message="Logged out successfully", code=status.HTTP_200_OK)
+
+def toggle_follow(db: Session, follower: User_Account, target_pseudonym: str):
+    target_user = db.query(User_Account).filter(User_Account.pseudonym == target_pseudonym).first()
+    if not target_user:
+        raise NotFound("Target user not found")
+    
+    if target_user.id == follower.id:
+        raise InvalidSignature("You cannot follow yourself")
+    
+    existing_follow = db.query(Follow).filter(
+        Follow.follower_id == follower.id,
+        Follow.followed_id == target_user.id
+    ).first()
+    
+    if existing_follow:
+        db.delete(existing_follow)
+        db.commit()
+        return SuccessResponse(message=f"Unfollowed {target_pseudonym}", code=status.HTTP_200_OK, data={"is_following": False})
+    
+    new_follow = Follow(follower_id=follower.id, followed_id=target_user.id)
+    db.add(new_follow)
+    db.commit()
+    
+    from src.notifications.service import create_notification
+    import asyncio
+    asyncio.create_task(create_notification(
+        db, 
+        recipient_id=target_user.id, 
+        type="follow", 
+        message=f"{follower.pseudonym} followed you", 
+        sender_id=follower.id
+    ))
+    
+    return SuccessResponse(message=f"Followed {target_pseudonym}", code=status.HTTP_201_CREATED, data={"is_following": True})
+
+def get_followers(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    followers = []
+    for f in user.followers:
+        is_following = False
+        if current_user:
+            is_following = db.query(Follow).filter(
+                Follow.follower_id == current_user.id,
+                Follow.followed_id == f.follower.id
+            ).first() is not None
+        
+        followers.append(UserListResponse(
+            pseudonym=f.follower.pseudonym,
+            is_following=is_following
+        ))
+    
+    return SuccessResponse(message="Followers fetched", data=followers)
+
+def get_following(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    following = []
+    for f in user.following:
+        is_following = True # They are in the following list
+        # If current_user is different, we check if current_user follows this person
+        if current_user and current_user.id != user.id:
+            is_following = db.query(Follow).filter(
+                Follow.follower_id == current_user.id,
+                Follow.followed_id == f.followed.id
+            ).first() is not None
+            
+        following.append(UserListResponse(
+            pseudonym=f.followed.pseudonym,
+            is_following=is_following
+        ))
+    
+    return SuccessResponse(message="Following list fetched", data=following)
+    
+def get_user_profile(db: Session, pseudonym: str, current_user: User_Account = None):
+    user = db.query(User_Account).filter(User_Account.pseudonym == pseudonym).first()
+    if not user:
+        raise NotFound("User not found")
+    
+    is_following = False
+    if current_user:
+        is_following = db.query(Follow).filter(
+            Follow.follower_id == current_user.id,
+            Follow.followed_id == user.id
+        ).first() is not None
+        
+    from src.post.models import Post
+    data = {
+        "id": user.id,
+        "pseudonym": user.pseudonym,
+        "followers_count": len(user.followers),
+        "following_count": len(user.following),
+        "is_following": is_following,
+        "posts_count": db.query(Post).filter(Post.user_id == user.id).count()
+    }
+    return SuccessResponse(message="User profile fetched", data=data)
     
     
     

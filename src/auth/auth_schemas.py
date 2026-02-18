@@ -3,8 +3,8 @@ from typing import Annotated, List
 RecoveryPhraseHashes = Annotated[
     List[str],
     Field(
-        min_length=20,
-        max_length=20,
+        min_length=12,
+        max_length=12,
         description=(
             "Hashed recovery phrase words generated on the client. "
             "The original phrase is never sent to the server."
@@ -38,4 +38,13 @@ class LoginResponse(BaseModel):
 
 class VerifyResponse(BaseModel):
     user_id: int
-    token: str
+    access_token: str
+    refresh_token: str
+    pseudonym: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+class UserListResponse(BaseModel):
+    pseudonym: str
+    is_following: bool = False
