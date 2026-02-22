@@ -2,7 +2,7 @@ import secrets
 import jwt
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from fastapi import status
+from fastapi import status, Response
 from .models import User_Account, Follow
 from .auth_schemas import SignupRequest, SignUpResponse, VerifyRequest, VerifyResponse, LoginRequest, LoginResponse, UserListResponse
 from src.config import settings
@@ -138,22 +138,22 @@ def verify_auth(db: Session, data: VerifyRequest, response: Response):
     db.refresh(user)
     
     # Set cookies
-    response.set_cookie(
-        key="auth_token",
-        value=access_token,
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
-        samesite="lax",
-        secure=settings.ENVIRONMENT == "production"
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=raw_refresh_token,
-        httponly=True,
-        max_age=REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60,
-        samesite="lax",
-        secure=settings.ENVIRONMENT == "production"
-    )
+    # response.set_cookie(
+    #     key="auth_token",
+    #     value=access_token,
+    #     httponly=True,
+    #     max_age=ACCESS_TOKEN_EXP_MINUTES * 60,
+    #     samesite="lax",
+    #     secure=settings.ENVIRONMENT == "production"
+    # )
+    # response.set_cookie(
+    #     key="refresh_token",
+    #     value=raw_refresh_token,
+    #     httponly=True,
+    #     max_age=REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60,
+    #     samesite="lax",
+    #     secure=settings.ENVIRONMENT == "production"
+    # )
 
     return SuccessResponse(
         message="Authentication successful.", 
