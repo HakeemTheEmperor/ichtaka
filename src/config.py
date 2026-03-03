@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS Settings
-    CORS_ORIGINS: list[str] = ["*"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://ichtaka-app.vercel.app",
+        "https://www.ichtaka-app.vercel.app"
+    ]
+    
+    # Agent Settings
+    AGENT_URL: str
+    AGENT_API_KEY: str
     
 settings = Settings()

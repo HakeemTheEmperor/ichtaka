@@ -51,6 +51,27 @@ async def create_post(db: Session, user: User_Account, data: PostCreate) -> Succ
     resp = PostResponse.model_validate(new_post)
     resp.pseudonym = user.pseudonym
     
+    # Send post to AI agent for moderation
+    # from src.config import settings
+    # import httpx
+    
+    # encoded_id = encode_ids(new_post.id)
+    # payload = {
+    #     "report_id": encoded_id,
+    #     "text": new_post.description,
+    #     "image_url": new_post.file_url if new_post.file_url else None
+    # }
+    
+    # headers = {
+    #     "Authorization": f"Bearer {settings.AGENT_API_KEY}"
+    # }
+    
+    # try:
+    #     async with httpx.AsyncClient() as client:
+    #         await client.post(f"{settings.AGENT_URL}/v1/analyze", json=payload, headers=headers)
+    # except Exception as e:
+    #     print(f"Failed to send post to AI agent: {e}")
+    
     return SuccessResponse(
         message="Post created successfully", 
         code=status.HTTP_201_CREATED, 
