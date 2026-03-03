@@ -60,6 +60,13 @@ app.include_router(
     tags=["Search"]
 )
 
+from src.agent.router import router as agent_router
+app.include_router(
+    agent_router,
+    prefix="/v1/ichtaka",
+    tags=["Agent Integration"]
+)
+
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
