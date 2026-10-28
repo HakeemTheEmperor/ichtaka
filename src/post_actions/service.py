@@ -76,7 +76,14 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
     return new_comment
 
 def _apply_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
-    post = db.query(Post).options(noload(Post.comments)).filter(Post.id == post_id).first()
+    # Lock the post row first. Votes on the same post then run one at a time, so two
+    # requests can no longer read the same counter value and overwrite each other's
+    # update, and a double click sees the first request's vote instead of racing it
+    # into the unique constraint. Votes on different posts do not block each other.
+    post = (
+        db.query(Post).options(noload(Post.comments))
+        .filter(Post.id == post_id).with_for_update().first()
+    )
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 

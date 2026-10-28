@@ -43,6 +43,30 @@ Repeat runs landed within about 3% of the sweep numbers (before, 100 users: 59.6
 I also fixed four endpoints that returned 500 before any of this (post detail,
 search, vote, comment).
 
+## Vote counts under simultaneous voting
+
+Speed is no use if the numbers are wrong, so `vote_consistency.py` fires many votes at
+once and then checks each post's stored vote counter against the actual vote rows.
+"Wrong votes" is the total gap between the two across the test posts. Three runs each:
+
+| Scenario | Before: wrong votes | After: wrong votes |
+| --- | ---: | ---: |
+| 200 users upvote one post at once | 188 to 196 | 0 |
+| 300 users cast random up/down votes on 5 posts (1,500 votes) | 486 to 519 | 0 |
+| 150 users double-click the same vote | 86 to 98, plus 97 to 106 server errors | 0, no errors |
+
+Cause: voting read the counter, added one in Python and wrote the result back. Requests
+that overlapped read the same starting value and overwrote each other, so out of 200
+simultaneous upvotes the counter only recorded a handful. A double click made both
+requests try to insert the same vote row and one of them failed with a 500.
+
+Fix: lock the post row at the start of the vote (`SELECT ... FOR UPDATE`). Votes on the
+same post then run one after another and each sees the previous one. Votes on different
+posts do not block each other. Throughput on the main load test did not change
+(133 req/s at 200 users, against 131 before).
+
+Run it with `uv run python benchmarks/vote_consistency.py`.
+
 ## Setup
 
 - Machine: 4 vCPU, 16 GB RAM. Postgres 16, the load generator and the API all ran on
@@ -61,8 +85,6 @@ search, vote, comment).
 - Multi-worker or multi-host scaling.
 - Dataset sizes beyond 20,000 posts. Search uses `ILIKE '%q%'`, which scans the table
   and will get slower as it grows.
-- Vote counter correctness under concurrent votes on one post. The counters are still
-  updated with an unlocked read-modify-write.
 
 ## Reproducing
 
