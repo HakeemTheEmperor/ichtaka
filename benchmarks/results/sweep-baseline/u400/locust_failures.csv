@@ -1,3 +1,0 @@
-Method,Name,Error,Occurrences,First Seen,Last Seen
-GET,GET /v1/posts/{id},HTTPError('404 Client Error: Not Found for url: GET /v1/posts/{id}'),1,2026-10-28T16:34:39Z,2026-10-28T16:34:39Z
-POST,POST /v1/posts/actions/{id}/vote,HTTPError('404 Client Error: Not Found for url: POST /v1/posts/actions/{id}/vote'),1,2026-10-28T16:34:23Z,2026-10-28T16:34:23Z
