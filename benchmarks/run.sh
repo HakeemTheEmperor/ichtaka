@@ -10,7 +10,7 @@ source benchmarks/env.sh
 WORKERS=${WORKERS:-1}
 APP_DIR=${APP_DIR:-$PWD}   # code under test (a git worktree for before/after runs)
 
-( cd "$APP_DIR" && "$OLDPWD/.venv/bin/uvicorn" --app-dir "$APP_DIR" src.app:app --port 8000 --workers "$WORKERS" --log-level warning ) &
+( cd "$APP_DIR" && exec "$OLDPWD/.venv/bin/uvicorn" --app-dir "$APP_DIR" src.app:app --port 8000 --workers "$WORKERS" --log-level warning ) &
 SRV=$!; trap 'kill $SRV 2>/dev/null || true' EXIT
 for _ in $(seq 60); do curl -sf localhost:8000/ >/dev/null && break; sleep 0.5; done
 
