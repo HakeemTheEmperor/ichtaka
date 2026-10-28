@@ -41,6 +41,8 @@ class Post(Base):
     __table_args__ = (
         Index("ix_posts_created_at", "created_at"),
         Index("ix_posts_user_id", "user_id"),
+        Index("ix_posts_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_posts_description_trgm", "description", postgresql_using="gin", postgresql_ops={"description": "gin_trgm_ops"}),
     )
 
     # Relationships

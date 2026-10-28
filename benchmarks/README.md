@@ -67,6 +67,64 @@ posts do not block each other. Throughput on the main load test did not change
 
 Run it with `uv run python benchmarks/vote_consistency.py`.
 
+## Larger dataset: 500,000 posts
+
+Everything above used 20,000 posts. To see what happens as the data grows, the same
+tests were run on 500,000 posts, 1.5 million comments and 2 million votes (884 MB).
+Same machine, same traffic mix, one worker.
+
+The code that was fine at 20,000 posts was not fine at 500,000:
+
+| Request, one at a time, no other load | Before | After |
+| --- | ---: | ---: |
+| Search for a phrase | 1,389 ms | 29 ms |
+| Search that matches nothing | 1,286 ms | 7 ms |
+| Feed, first page | 44 ms | 7 ms |
+| Trending | 210 ms | 2 ms (cached) |
+| Feed, page 40,000 | 505 ms | 219 ms |
+
+Under load (500,000 posts):
+
+| Concurrent users | Before: req/s | Before: p50 / p95 | After: req/s | After: p50 / p95 |
+| ---: | ---: | ---: | ---: | ---: |
+| 25  | 22.0 | 32 / 1,300 ms | 24.7  | 11 / 28 ms |
+| 50  | 41.1 | 59 / 420 ms | 49.4  | 12 / 36 ms |
+| 100 | 46.2 | 620 / 1,900 ms | 96.7  | 14 / 54 ms |
+| 200 | 33.6 | 4,000 / 11,000 ms | 145.2 | 320 / 570 ms |
+| 400 | not run | not run | 143.5 | 1,600 / 2,400 ms |
+
+A repeat of the 200-user run after the changes gave 139.8 req/s (p95 640 ms).
+At 100 users the "after" figure is limited by how many requests the simulated users
+send, not by the server.
+
+What was wrong and what fixed it:
+
+1. **Search scanned the whole table.** `ILIKE '%text%'` cannot use a normal index, so each
+   search read all 500,000 posts. A search takes seconds, and while it ran it held a
+   worker and the database, so every other request queued behind it. Votes went from
+   23 ms to 430 ms at 100 users. Fix: trigram (`pg_trgm`) indexes on post title,
+   post description and user pseudonym. The index took 12 seconds to build and is 34 MB
+   for the descriptions. `sql/002_search_trigram.sql` adds it to an existing database.
+2. **The feed counted every post on every page view.** An exact `COUNT(*)` over 500,000
+   rows costs about 44 ms. The total is now reused for 5 seconds.
+3. **Trending recalculated a week of posts and comments on every request.** The result
+   is now reused for 30 seconds.
+
+Both caches live inside one server process, so each worker keeps its own copy. The
+side effect is that the total page count can be up to 5 seconds out of date and a
+newly popular post can take up to 30 seconds to show in trending.
+
+Still slow: jumping to a very deep page (page 40,000 takes 219 ms) because the database
+has to skip 400,000 rows to get there. Fixing that properly means changing the feed to
+"next page after this post" instead of page numbers, which changes the API.
+
+To rerun at this size:
+
+```bash
+SEED_ARGS="--posts 500000 --comments-per-post 3 --votes-per-post 4" benchmarks/sweep.sh seed-only  # seeds, then runs
+BENCH_POSTS=500000 SKIP_SEED=1 LEVELS="25 50 100 200 400" benchmarks/sweep.sh large-run
+```
+
 ## Setup
 
 - Machine: 4 vCPU, 16 GB RAM. Postgres 16, the load generator and the API all ran on
@@ -83,8 +141,7 @@ Run it with `uv run python benchmarks/vote_consistency.py`.
 - Auth (signup, login, verify) cost.
 - WebSocket fan-out.
 - Multi-worker or multi-host scaling.
-- Dataset sizes beyond 20,000 posts. Search uses `ILIKE '%q%'`, which scans the table
-  and will get slower as it grows.
+- Datasets beyond 500,000 posts, and very deep pagination.
 
 ## Reproducing
 

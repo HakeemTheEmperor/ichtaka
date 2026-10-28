@@ -7,7 +7,7 @@ from .notifications.router import router as notifications_router
 from .search.router import router as search_router
 from src.core.errors.exception_handlers import (app_exception_handler, unhandled_exception_handler)
 from src.core.errors.base_exception import AppException
-from src.database import Base, engine
+from src.database import Base, engine, ensure_extensions
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 
@@ -69,6 +69,7 @@ app.include_router(
 
 @app.on_event("startup")
 def on_startup():
+    ensure_extensions()
     Base.metadata.create_all(bind=engine)
 
 @app.get("/")

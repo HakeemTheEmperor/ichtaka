@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, BigInteger, JSON
+from sqlalchemy import Column, Index, String, BigInteger, JSON
 from src.database import Base
 
 class User_Account(Base):
@@ -11,6 +11,10 @@ class User_Account(Base):
     recovery_phrase_hashes = Column(JSON, nullable=False)  # list of 20 hashed words
     pseudonym = Column(String, unique=True, nullable=False)
     
+    __table_args__ = (
+        Index("ix_user_account_pseudonym_trgm", "pseudonym", postgresql_using="gin", postgresql_ops={"pseudonym": "gin_trgm_ops"}),
+    )
+
     from sqlalchemy.orm import relationship
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     followers = relationship("Follow", foreign_keys="[Follow.followed_id]", back_populates="followed", cascade="all, delete-orphan")

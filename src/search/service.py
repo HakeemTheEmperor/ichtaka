@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session, joinedload, noload, selectinload
 from sqlalchemy import or_, desc, func
+import time
 from datetime import datetime, timedelta
 from src.post.models import Post
 from src.auth.models import User_Account, Follow
@@ -44,7 +45,20 @@ def search_all(db: Session, query_str: str, current_user: User_Account = None) -
         
     return SearchResults(posts=post_responses, users=user_responses)
 
+# Trending is the same for every visitor and only needs to be roughly current, but it
+# aggregates a week of posts and comments, so reuse the result for a short time.
+_TRENDING_TTL_SECONDS = 30
+_trending_cache = {"limit": None, "value": [], "expires": 0.0}
+
 def get_trending_posts(db: Session, limit: int = 5):
+    now = time.monotonic()
+    if _trending_cache["limit"] == limit and now < _trending_cache["expires"]:
+        return _trending_cache["value"]
+    result = _compute_trending_posts(db, limit)
+    _trending_cache.update(limit=limit, value=result, expires=now + _TRENDING_TTL_SECONDS)
+    return result
+
+def _compute_trending_posts(db: Session, limit: int):
     # Trending = (upvotes + comments) in the last 7 days
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
     

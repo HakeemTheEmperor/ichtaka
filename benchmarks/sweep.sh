@@ -5,7 +5,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 LABEL=${1:?label}; export APP_DIR=${2:-$PWD}
 source benchmarks/env.sh
-( cd "$APP_DIR" && PYTHONPATH="$APP_DIR" "$OLDPWD/.venv/bin/python" "$OLDPWD/benchmarks/seed.py" >/dev/null )
+if [ -z "${SKIP_SEED:-}" ]; then
+  # SEED_ARGS example: "--posts 500000 --comments-per-post 3 --votes-per-post 4"
+  ( cd "$APP_DIR" && PYTHONPATH="$APP_DIR" "$OLDPWD/.venv/bin/python" "$OLDPWD/benchmarks/seed.py" ${SEED_ARGS:-} >/dev/null )
+fi
 for U in ${LEVELS:-50 100 200 400 800}; do
   benchmarks/run.sh "$LABEL/u$U" "$U" "${DURATION:-45s}" 50 >/dev/null 2>&1 || echo "run $U failed" >&2
 done

@@ -26,6 +26,8 @@ def main():
     from src.post_actions.models import Comment, Vote  # noqa: F401
     from src.notifications.models import Notification  # noqa: F401
 
+    from src.database import ensure_extensions
+    ensure_extensions()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 

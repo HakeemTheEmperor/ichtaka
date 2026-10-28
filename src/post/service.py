@@ -10,6 +10,7 @@ from src.notifications.service import create_notification
 from src.utils.encoding import encode_ids
 import asyncio
 import math
+import time
 
 async def create_post(db: Session, user: User_Account, data: PostCreate) -> SuccessResponse :
     new_post = Post(
@@ -86,6 +87,18 @@ def enrich_comment(comment_obj, comment_schema):
     for sub_obj, sub_schema in zip(comment_obj.replies, comment_schema.replies):
         enrich_comment(sub_obj, sub_schema)
 
+# COUNT(*) over the whole posts table runs on every feed request and gets slower as the
+# table grows. The page count only needs to be roughly right, so reuse it for a few seconds.
+_TOTAL_TTL_SECONDS = 5
+_total_cache = {"value": 0, "expires": 0.0}
+
+def _cached_total_posts(query) -> int:
+    now = time.monotonic()
+    if now >= _total_cache["expires"]:
+        _total_cache["value"] = query.count()
+        _total_cache["expires"] = now + _TOTAL_TTL_SECONDS
+    return _total_cache["value"]
+
 def get_comment_counts(db: Session, post_ids: list[int]) -> dict[int, int]:
     from src.post_actions.models import Comment
     if not post_ids:
@@ -110,7 +123,7 @@ def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = N
     
     # query = query.filter(Post.status == PostStatus.CONFIRMED)
     
-    total = query.count()
+    total = query.count() if pseudonym else _cached_total_posts(query)
     posts = query.order_by(Post.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
     
     # Batch fetch votes if user is logged in

@@ -14,6 +14,11 @@ SessionLocal = sessionmaker(autoflush=False, expire_on_commit=False, bind=engine
 
 Base = declarative_base()
 
+def ensure_extensions():
+    # pg_trgm backs the search indexes; it is a trusted extension, so the database owner can create it
+    with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+
 # async so that creating and closing the session runs on the event loop instead of
 # needing a threadpool slot. A connection is only checked out lazily on first query;
 # if closing it required a worker thread while every worker was blocked waiting for a
