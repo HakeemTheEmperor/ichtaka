@@ -1,0 +1,4 @@
+export DATABASE_URL=${DATABASE_URL:-postgresql://postgres@localhost:5433/ichtaka}
+export JWT_SECRET_KEY=${JWT_SECRET_KEY:-bench-secret} JWT_ALGORITHM=HS256
+export ACCESS_TOKEN_EXPIRE_MINUTES=60 AGENT_URL=http://localhost:1 AGENT_API_KEY=x
+export BENCH_USERS=${BENCH_USERS:-2000} BENCH_POSTS=${BENCH_POSTS:-20000}
