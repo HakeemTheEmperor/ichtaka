@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,POST /v1/posts/actions/{id}/vote,"ConnectionRefusedError(111, 'Connection refused')",9,2026-10-28T16:32:45Z,2026-10-28T16:32:45Z
+GET,GET /v1/posts (feed),"ConnectionRefusedError(111, 'Connection refused')",29,2026-10-28T16:32:45Z,2026-10-28T16:32:45Z
+GET,GET /v1/search,"ConnectionRefusedError(111, 'Connection refused')",1,2026-10-28T16:32:45Z,2026-10-28T16:32:45Z
+GET,GET /v1/posts/{id},"ConnectionRefusedError(111, 'Connection refused')",10,2026-10-28T16:32:45Z,2026-10-28T16:32:45Z
+POST,POST /v1/posts/actions/{id}/comments,"ConnectionRefusedError(111, 'Connection refused')",1,2026-10-28T16:32:45Z,2026-10-28T16:32:45Z
