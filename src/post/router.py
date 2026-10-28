@@ -51,7 +51,7 @@ async def get_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
         
-    resp = schemas.PostResponse.from_attributes(post)
+    resp = schemas.PostResponse.model_validate(post)
     if post.author:
             resp.pseudonym = post.author.pseudonym
     
@@ -84,7 +84,7 @@ async def update_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
         
-    resp = schemas.PostResponse.from_attributes(post)
+    resp = schemas.PostResponse.model_validate(post)
     if post.author:
         resp.pseudonym = post.author.pseudonym
     return {"message": "Post updated successfully", "code": 200, "data": resp}

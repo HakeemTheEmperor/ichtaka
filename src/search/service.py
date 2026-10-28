@@ -21,6 +21,8 @@ def search_all(db: Session, query_str: str, current_user: User_Account = None) -
     for p in posts:
         resp = PostResponse.model_validate(p)
         resp.pseudonym = p.author.pseudonym if p.author else "Anonymous"
+        resp.comments_count = len(p.comments)
+        resp.comments = []
         post_responses.append(resp)
         
     # Search Users
@@ -57,6 +59,8 @@ def get_trending_posts(db: Session, limit: int = 5):
     for p, score in trending_posts:
         resp = PostResponse.model_validate(p)
         resp.pseudonym = p.author.pseudonym if p.author else "Anonymous"
+        resp.comments_count = len(p.comments)
+        resp.comments = []
         result.append(resp)
         
     return result

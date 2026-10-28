@@ -6,6 +6,7 @@ from .schemas import CommentCreate, VoteRequest
 from src.auth.models.user_account import User_Account
 from src.core.utils.response import SuccessResponse
 from src.notifications.service import create_notification
+from src.core.websocket_manager import manager
 from src.utils.encoding import decode_ids, encode_ids
 import asyncio
 
