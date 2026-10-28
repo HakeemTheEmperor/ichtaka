@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, ForeignKey, Enum, DateTime, Text, UniqueConstraint
+from sqlalchemy import Index, Column, BigInteger, ForeignKey, Enum, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from src.database import Base
 from datetime import datetime
@@ -18,6 +18,11 @@ class Comment(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    __table_args__ = (
+        Index("ix_post_comments_post_id", "post_id"),
+        Index("ix_post_comments_parent_id", "parent_id"),
+    )
+
     # Relationships
     post = relationship("Post", back_populates="comments")
     author = relationship("User_Account", backref="post_comments")

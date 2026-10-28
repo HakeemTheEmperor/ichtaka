@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload, noload, selectinload
 from fastapi import status
 from .models import Post, PostStatus
 from .schemas import PostCreate, PostUpdate, PostResponse, FeedResponse
@@ -85,8 +86,20 @@ def enrich_comment(comment_obj, comment_schema):
     for sub_obj, sub_schema in zip(comment_obj.replies, comment_schema.replies):
         enrich_comment(sub_obj, sub_schema)
 
+def get_comment_counts(db: Session, post_ids: list[int]) -> dict[int, int]:
+    from src.post_actions.models import Comment
+    if not post_ids:
+        return {}
+    rows = (
+        db.query(Comment.post_id, func.count(Comment.id))
+        .filter(Comment.post_id.in_(post_ids))
+        .group_by(Comment.post_id)
+        .all()
+    )
+    return {post_id: n for post_id, n in rows}
+
 def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = None, pseudonym: str = None):
-    query = db.query(Post)
+    query = db.query(Post).options(joinedload(Post.author), noload(Post.comments))
     
     if pseudonym:
         query = query.join(User_Account).filter(User_Account.pseudonym == pseudonym)
@@ -111,6 +124,8 @@ def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = N
         ).all()
         user_votes_map = {v.post_id: v.vote_type.value for v in votes}
     
+    comment_counts = get_comment_counts(db, [p.id for p in posts])
+
     post_responses = []
     for p in posts:
         resp = PostResponse.model_validate(p)
@@ -120,11 +135,7 @@ def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = N
         # Set user vote status
         resp.user_vote_status = user_votes_map.get(p.id, "none")
             
-        # Lazy loading comments: just count them
-        resp.comments_count = len(p.comments) # This uses the relationship, might trigger load if not careful, but usually acceptable for small sets or joined query. 
-        # Ideally using a count query is better for performance but this is a start.
-        # Actually p.comments might be lazy loaded. 
-        # Let's clean comments list to avoid huge payload
+        resp.comments_count = comment_counts.get(p.id, 0)
         resp.comments = []
         
         # for c_obj, c_schema in zip(root_comments_objs, resp.comments):
@@ -140,7 +151,17 @@ def get_feed(db: Session, page: int = 1, limit: int = 10, user: User_Account = N
         
 
 def get_post(db: Session, post_id: int) -> Post:
-    return db.query(Post).filter(Post.id == post_id).first()
+    from src.post_actions.models import Comment
+    return (
+        db.query(Post)
+        .options(
+            joinedload(Post.author),
+            selectinload(Post.comments).joinedload(Comment.author),
+            selectinload(Post.comments).selectinload(Comment.replies).joinedload(Comment.author),
+        )
+        .filter(Post.id == post_id)
+        .first()
+    )
 
 async def update_post(db: Session, post_id: int, data: PostUpdate) -> Post:
     post = get_post(db, post_id)

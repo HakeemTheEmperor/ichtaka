@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, noload
 from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException, status
 from src.post.models import Post, PostStatus
@@ -12,7 +12,7 @@ from src.utils.encoding import decode_ids, encode_ids
 import asyncio
 
 def _insert_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
-    post = db.query(Post).filter(Post.id == post_id).first()
+    post = db.query(Post).options(noload(Post.comments)).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
@@ -76,7 +76,7 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
     return new_comment
 
 def _apply_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
-    post = db.query(Post).filter(Post.id == post_id).first()
+    post = db.query(Post).options(noload(Post.comments)).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
@@ -154,7 +154,7 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
     )
 
 async def update_post_status(db: Session, post_id: int, new_status: PostStatus):
-    post = db.query(Post).filter(Post.id == post_id).first()
+    post = db.query(Post).options(noload(Post.comments)).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     

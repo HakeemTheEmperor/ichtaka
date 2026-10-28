@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, BigInteger, JSON, ForeignKey, Enum, DateTime, Text, Integer
+from sqlalchemy import Index, Column, String, BigInteger, JSON, ForeignKey, Enum, DateTime, Text, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.database import Base
@@ -38,7 +38,12 @@ class Post(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    __table_args__ = (
+        Index("ix_posts_created_at", "created_at"),
+        Index("ix_posts_user_id", "user_id"),
+    )
+
     # Relationships
     author = relationship("User_Account", backref="posts")
-    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan", lazy="selectin")
+    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan")

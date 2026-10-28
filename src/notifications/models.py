@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, ForeignKey, Boolean, Enum
+from sqlalchemy import Index, Column, Integer, BigInteger, String, DateTime, ForeignKey, Boolean, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -21,6 +21,10 @@ class Notification(Base):
     message = Column(String, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_notifications_recipient_created", "recipient_id", "created_at"),
+    )
 
     # Relationships
     recipient = relationship("User_Account", foreign_keys=[recipient_id], backref="notifications")
