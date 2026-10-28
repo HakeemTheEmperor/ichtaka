@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,POST /v1/posts/actions/{id}/vote,HTTPError('404 Client Error: Not Found for url: POST /v1/posts/actions/{id}/vote'),2,2026-10-28T17:08:19Z,2026-10-28T17:08:34Z
