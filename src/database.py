@@ -10,11 +10,15 @@ engine = create_engine(
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_pre_ping=True,
 )
-SessionLocal = sessionmaker(autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autoflush=False, expire_on_commit=False, bind=engine)
 
 Base = declarative_base()
 
-def get_db():
+# async so that creating and closing the session runs on the event loop instead of
+# needing a threadpool slot. A connection is only checked out lazily on first query;
+# if closing it required a worker thread while every worker was blocked waiting for a
+# pooled connection, the pool would deadlock under load.
+async def get_db():
     db = SessionLocal()
     try:
         yield db

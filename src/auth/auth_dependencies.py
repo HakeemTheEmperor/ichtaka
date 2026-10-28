@@ -34,6 +34,7 @@ def get_current_user(
             )
         
         user = db.query(User_Account).filter(User_Account.id == int(user_id)).first()
+        db.commit()  # give the connection back; the handler checks one out again when it queries
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -70,6 +71,7 @@ def get_optional_current_user(
             return None
         
         user = db.query(User_Account).filter(User_Account.id == int(user_id)).first()
+        db.commit()
         return user
     except jwt.PyJWTError:
         return None
