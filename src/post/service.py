@@ -40,7 +40,6 @@ async def create_post(db: Session, user: User_Account, data: PostCreate) -> Succ
     if user:
         for f in user.followers:
             asyncio.create_task(create_notification(
-                db,
                 recipient_id=f.follower_id,
                 type="new_post",
                 message=f"{user.pseudonym} just posted: {new_post.title[:30]}...",

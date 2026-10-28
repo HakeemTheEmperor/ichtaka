@@ -31,7 +31,7 @@ async def create_post(
     
 
 @router.get("/", response_model=APIResponse[schemas.FeedResponse])
-async def get_feed(
+def get_feed(
     db: DB_SESSION,
     user: Optional[User_Account] = Depends(get_optional_current_user), # Use dependency directly or define alias in router
     page: int = Query(1, ge=1),
@@ -41,7 +41,7 @@ async def get_feed(
     return service.get_feed(db, page, limit, user, pseudonym)
 
 @router.get("/{id}", response_model=APIResponse[schemas.PostResponse])
-async def get_post(
+def get_post(
     id: str,
     db: DB_SESSION,
     user: Optional[User_Account] = Depends(get_optional_current_user)

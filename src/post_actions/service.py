@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException, status
 from src.post.models import Post, PostStatus
 from .models import Comment, Vote, VoteType
@@ -10,28 +11,28 @@ from src.core.websocket_manager import manager
 from src.utils.encoding import decode_ids, encode_ids
 import asyncio
 
-async def add_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
+def _insert_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    
+
     parent_id = None
     if data.parent_id:
         try:
             parent_id = decode_ids(data.parent_id)
         except (ValueError, KeyError):
             raise HTTPException(status_code=400, detail="Invalid parent_id format")
-            
+
         parent = db.query(Comment).filter(Comment.id == parent_id, Comment.post_id == post_id).first()
         if not parent:
             raise HTTPException(status_code=404, detail="Parent comment not found")
-        
+
         # Enforce 2-layer depth limit
         if parent.parent_id is not None:
             grandfather = db.query(Comment).filter(Comment.id == parent.parent_id).first()
             if grandfather and grandfather.parent_id is not None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, 
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Maximum comment depth reached (only 2 layers of nesting allowed)"
                 )
 
@@ -44,7 +45,11 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
-    
+    return new_comment, post.user_id, post.title
+
+async def add_comment(db: Session, user: User_Account, post_id: int, data: CommentCreate):
+    new_comment, post_author_id, post_title = await run_in_threadpool(_insert_comment, db, user, post_id, data)
+
     # Broadcast new comment
     await manager.broadcast({
         "event": "new_comment",
@@ -57,31 +62,31 @@ async def add_comment(db: Session, user: User_Account, post_id: int, data: Comme
             "created_at": new_comment.created_at.isoformat() if new_comment.created_at else None
         }
     })
-    
+
     # Notify post author
-    if post.user_id and post.user_id != user.id:
+    if post_author_id and post_author_id != user.id:
         asyncio.create_task(create_notification(
-            db,
-            recipient_id=post.user_id,
+            recipient_id=post_author_id,
             type="comment",
-            message=f"{user.pseudonym} commented on your post: {post.title[:30]}...",
+            message=f"{user.pseudonym} commented on your post: {post_title[:30]}...",
             sender_id=user.id,
             post_id=encode_ids(post_id)
         ))
-    
+
     return new_comment
 
-async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
+def _apply_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    
+
     existing_vote = db.query(Vote).filter(
         Vote.post_id == post_id,
         Vote.user_id == user.id
     ).first()
-    
+
     new_vote_status = "none"
+    notify = None
     if existing_vote:
         if existing_vote.vote_type == vote_type:
             # Toggle off
@@ -102,48 +107,49 @@ async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: Vo
                 post.upvotes_count -= 1
     else:
         # New vote
-        new_vote = Vote(
-            post_id=post_id,
-            user_id=user.id,
-            vote_type=vote_type
-        )
-        db.add(new_vote)
+        db.add(Vote(post_id=post_id, user_id=user.id, vote_type=vote_type))
         new_vote_status = vote_type.value
         if vote_type == VoteType.UPVOTE:
             post.upvotes_count += 1
             # Notify post author on upvote
             if post.user_id and post.user_id != user.id:
-                asyncio.create_task(create_notification(
-                    db,
-                    recipient_id=post.user_id,
-                    type="like",
-                    message=f"{user.pseudonym} upvoted your post: {post.title[:30]}...",
-                    sender_id=user.id,
-                    post_id=encode_ids(post_id)
-                ))
+                notify = (post.user_id, post.title)
         else:
             post.downvotes_count += 1
-            
+
     db.commit()
-    db.refresh(post)
-    
+    return new_vote_status, post.upvotes_count, post.downvotes_count, notify
+
+async def cast_vote(db: Session, user: User_Account, post_id: int, vote_type: VoteType):
+    new_vote_status, upvotes, downvotes, notify = await run_in_threadpool(_apply_vote, db, user, post_id, vote_type)
+
+    if notify:
+        author_id, title = notify
+        asyncio.create_task(create_notification(
+            recipient_id=author_id,
+            type="like",
+            message=f"{user.pseudonym} upvoted your post: {title[:30]}...",
+            sender_id=user.id,
+            post_id=encode_ids(post_id)
+        ))
+
     # Broadcast vote update
     await manager.broadcast({
         "event": "vote_update",
         "data": {
             "post_id": post_id,
-            "upvotes": post.upvotes_count,
-            "downvotes": post.downvotes_count
+            "upvotes": upvotes,
+            "downvotes": downvotes
         }
     })
-    
+
     return SuccessResponse(
-        message="Vote recorded", 
-        code=status.HTTP_200_OK, 
+        message="Vote recorded",
+        code=status.HTTP_200_OK,
         data={
             "user_vote_status": new_vote_status,
-            "upvotes": post.upvotes_count,
-            "downvotes": post.downvotes_count
+            "upvotes": upvotes,
+            "downvotes": downvotes
         }
     )
 

@@ -27,7 +27,7 @@ async def add_comment(
     )
 
 @router.get("/{id}/comments", response_model=APIResponse[list[schemas.CommentResponse]])
-async def get_comments(
+def get_comments(
     id: str,
     db: DB_SESSION
 ):

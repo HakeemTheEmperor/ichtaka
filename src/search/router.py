@@ -11,7 +11,7 @@ from typing import List
 router = APIRouter()
 
 @router.get("", response_model=APIResponse[schemas.SearchResults])
-async def search(
+def search(
     q: str,
     db: DB_SESSION,
     user: CURRENT_USER
@@ -20,7 +20,7 @@ async def search(
     return SuccessResponse(message="Search results fetched", data=results)
 
 @router.get("/trending", response_model=APIResponse[List[PostResponse]])
-async def get_trending(
+def get_trending(
     db: DB_SESSION
 ):
     trending = service.get_trending_posts(db)

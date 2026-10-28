@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
+    # Connection pool
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+
     # CORS Settings
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

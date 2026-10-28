@@ -249,7 +249,6 @@ def toggle_follow(db: Session, follower: User_Account, target_pseudonym: str):
     from src.notifications.service import create_notification
     import asyncio
     asyncio.create_task(create_notification(
-        db, 
         recipient_id=target_user.id, 
         type="follow", 
         message=f"{follower.pseudonym} followed you", 
